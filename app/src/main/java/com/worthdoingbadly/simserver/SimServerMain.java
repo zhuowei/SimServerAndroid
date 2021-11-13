@@ -1,37 +1,46 @@
 package com.worthdoingbadly.simserver;
 
-import android.telephony.IccOpenLogicalChannelResponse;
+import android.content.Context;
+import android.os.Build;
+import android.os.Looper;
 import android.telephony.TelephonyManager;
 
-public class SimServerMain {
-    public static void main(String[] args) throws Exception {
-        System.out.println("Hello world!");
+import java.util.ArrayList;
+import java.util.List;
 
-        TelephonyManager telephonyManager = (TelephonyManager)
-                TelephonyManager.class.getMethod("getDefault")
-                        .invoke(null);
-        IccOpenLogicalChannelResponse iccOpenLogicalChannelResponse =
-                telephonyManager.iccOpenLogicalChannel("");
-        // TODO(zhuowei): error handling: app shutting down doesn't clean up channel
-        final int logicalChannel = iccOpenLogicalChannelResponse.getChannel();
-        System.out.println("Opened logical channel: " + logicalChannel);
-        //String authVal = telephonyManager.getIccAuthentication(TelephonyManager.APPTYPE_USIM,
-        //        TelephonyManager.AUTHTYPE_EAP_AKA, "lololol");
-        //System.out.println(authVal);
-        //String response = telephonyManager.iccTransmitApduLogicalChannel(0, 1, 2, 3, 4, 5, "6");
-        // https://www.mutek.com/apdus-to-get-sim-card-iccid/
-        // https://cs.android.com/android/platform/superproject/+/master:cts/tests/tests/carrierapi/src/android/carrierapi/cts/CarrierApiTest.java;l=824;drc=3d8adba77f5c6c4796c5a085de19b274823c01b5
-        String response = telephonyManager.iccTransmitApduLogicalChannel(logicalChannel,0xa0, 0xa4, 0x00, 0x00, 0x02, "3F00");
-        System.out.println(response);
-        response = telephonyManager.iccTransmitApduLogicalChannel(logicalChannel, 0xa0, 0xa4, 0x00, 0x00, 0x02, "2FE2");
-        System.out.println(response);
-        response =  telephonyManager.iccTransmitApduLogicalChannel(logicalChannel, 0xa0, 0xb0, 0x00, 0x00, 0x0a, "");
-        System.out.println(response);
-        telephonyManager.iccCloseLogicalChannel(logicalChannel);
-        StringBuilder iccId = new StringBuilder();
-        for (int i = 0; i < 10; i++) {
-            iccId.append(response.charAt(i*2+1)).append(response.charAt(i*2));
+public class SimServerMain {
+    public static TelephonyManager telephonyManager;
+    public static void main(String[] args) throws Exception {
+        if (Build.VERSION.SDK_INT >= 30 /* Android 11 */) {
+            Class activityThreadClass = Class.forName("android.app.ActivityThread");
+            activityThreadClass.getMethod("initializeMainlineModules").invoke(null);
+            Looper.prepareMainLooper();
+            Object mainActivityThread = activityThreadClass.getMethod("systemMain").invoke(null);
+            Context context = (Context) activityThreadClass.getMethod("getSystemContext").invoke(mainActivityThread);
+            telephonyManager = context.getSystemService(TelephonyManager.class);
+        } else {
+            // Android 8.1
+            telephonyManager = (TelephonyManager)
+                    TelephonyManager.class.getMethod("getDefault")
+                            .invoke(null);
         }
-        System.out.println(iccId);
+        if (args.length == 0) {
+            System.out.println("Usage:\n" +
+                    "imsi: prints imsi\n" +
+                    "auth <base64-encoded data>: authenticates with EAP_AKA on ISIM\n" +
+                    "serve <port>: serves web server");
+            return;
+        }
+        if (args[0].equals("imsi")) {
+            System.out.println(telephonyManager.getSubscriberId());
+        } else if (args[0].equals("auth")) {
+            String response = telephonyManager.getIccAuthentication(TelephonyManager.APPTYPE_ISIM, TelephonyManager.AUTHTYPE_EAP_AKA, args[1]);
+            System.out.println(response);
+        } else if (args[0].equals("serve")) {
+            // TODO(zhuowei)
+            System.out.println("todo");
+        } else {
+            System.out.println("Unknown command");
+        }
     }
 }
