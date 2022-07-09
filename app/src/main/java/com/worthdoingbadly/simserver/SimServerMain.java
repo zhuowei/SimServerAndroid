@@ -1,11 +1,13 @@
 package com.worthdoingbadly.simserver;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Build;
 import android.os.Looper;
 import android.telephony.TelephonyManager;
 import android.util.Base64;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,15 @@ public class SimServerMain {
             Looper.prepareMainLooper();
             Object mainActivityThread = activityThreadClass.getMethod("systemMain").invoke(null);
             Context context = (Context) activityThreadClass.getMethod("getSystemContext").invoke(mainActivityThread);
+            if (Build.VERSION.SDK_INT >= 31 /* Android 12 */) {
+                // Android 12 needs context.getOpPackageName() to match our user's package
+                // there's probably a proper way to do this (ActivityThread.getPackageInfo/LoadedApk.makeApplication) but oh well
+                @SuppressLint("SoonBlockedPrivateApi")
+                Field opPackageNameField = Class.forName("android.app.ContextImpl").getDeclaredField("mOpPackageName");
+                opPackageNameField.setAccessible(true);
+                opPackageNameField.set(context, "com.android.shell");
+                context = context.createPackageContext("com.android.shell", 0);
+            }
             telephonyManager = context.getSystemService(TelephonyManager.class);
         } else {
             // Android 8.1
